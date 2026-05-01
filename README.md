@@ -8,7 +8,7 @@
 > 
 > _智能体驱动的意图编程操作系统_
 
-[![Phase](https://img.shields.io/badge/Phase-9%20Complete-6C63FF?style=for-the-badge)](https://github.com/quick123-666/Nexus-Frame-Mnemo-Spark-Vibe)
+[![Phase](https://img.shields.io/badge/Phase-11%20Complete-6C63FF?style=for-the-badge)](https://github.com/quick123-666/Nexus-Frame-Mnemo-Spark-Vibe)
 [![Python](https://img.shields.io/badge/Python-3.12+-007ACC?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-FF6B6B?style=for-the-badge)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Production%20Ready-2ECC71?style=for-the-badge)](https://github.com/quick123-666/Nexus-Frame-Mnemo-Spark-Vibe)
@@ -95,7 +95,7 @@ The system follows four core principles:
 | **Mnemo** | 💾 | Memory Bank · 记忆库 | File-based project state · 基于文件的项目状态 |
 | **Spark** | ⚡ | Command Executor · 命令执行器 | Safe shell + WRITE_FILE · 安全 Shell + 文件写入 |
 | **GitOps** | 📦 | Version Control · 版本控制 | Auto commit after change · 变更后自动提交 |
-| **Vibe** | 🎨 | HITL Interface · 人机交互界面 | Dashboard + approval · 面板 + 审批流 |
+| **Vibe** | 🎨 | HITL Interface · 人机交互界面 | Dashboard + Web UI + Approval · 面板 + Web + 审批流 |
 | **LocalBrain** | 🤖 | Local AI Engine · 本地 AI 引擎 | 10+ pattern matching · 10+ 模式匹配 |
 | **Knowledge** | 📚 | Wiki Integration · 知识库集成 | 149 docs, 395 keywords · 149 文档 395 关键词 |
 | **GlobalMnemo** | 💾 | Cross-Project Memory · 跨项目记忆 | Error-solution sharing · 错误方案共享 |
@@ -108,12 +108,14 @@ The system follows four core principles:
 
 - Python 3.12+
 - Git
+- FastAPI (for Web UI)
 
 ### Installation · 安装
 
 ```bash
 git clone https://github.com/quick123-666/Nexus-Frame-Mnemo-Spark-Vibe.git
 cd Nexus-Frame-Mnemo-Spark-Vibe
+pip install fastapi uvicorn
 ```
 
 ### Usage · 使用
@@ -182,15 +184,10 @@ result = nexus.execute_with_human_loop("创建项目结构", ["git", "python"])
 
 | Phase · 阶段 | Name · 名称 | Status · 状态 | Description · 描述 |
 |:------------:|:-----------|:-------------:|:------------------|
-| **1** | Core Skeleton · 核心骨架 | ✅ | Frame, Mnemo, Nexus 基础架构 |
-| **2** | Spark Executor · 执行器 | ✅ | 安全 Shell 执行 + Git 自动化 |
-| **3** | Vibe Interface · 交互界面 | ✅ | HITL 面板 + 审批流 + 错误恢复 |
-| **4** | Templates · 模板 | ✅ | Python & Web 项目脚手架 |
-| **5** | Global Memory · 全局记忆 | ✅ | 跨项目错误方案数据库 |
-| **6** | Local AI · 本地 AI | ✅ | LocalBrain 模式匹配引擎 |
-| **7** | Real Project · 真实项目 | ✅ | CLI Task Manager 端到端构建 |
-| **8** | Knowledge Base · 知识库 | ✅ | LLM Wiki 集成 (149 文档) |
-| **9** | Knowledge-Driven Code · 知识驱动 | ✅ | Wiki 代码模式提升生成质量 |
+| **1-9** | Core Skeleton to Knowledge Base · 核心到知识库 | ✅ | Phase 1-9 (已完成) |
+| **10** | Vibe Interface (Interactive) · 交互式界面 | ✅ | Real-time Todo, AutoFix, Smart Routing (Phase 10 完成) |
+| **11** | Web UI (Dashboard) · Web 界面 | ✅ | FastAPI Server, WebSocket Streaming, Chinese UI (Phase 11 完成) |
+| **Fix** | Robustness · 健壮性 | ✅ | 5 min timeout, `request_fix` method, error handling (已完成修复) |
 
 </div>
 
@@ -262,11 +259,21 @@ Every command decision is enhanced by · 每个命令决策均由以下增强：
 
 Safety-first execution · 安全第一的执行流程：
 
-1. 📋 Display dashboard · 显示面板 (plan, progress)
+1. 📋 Display dashboard · 显示面板 (plan, progress, confidence)
 2. 👤 Request human approval · 请求人类审批 (y/n/modify)
 3. ⚡ Execute command · 执行命令
 4. 📦 Auto-commit on success · 成功后自动提交
-5. 🔄 Error recovery with global memory · 全局记忆错误恢复
+5. 🔄 Error recovery with global memory + `request_fix` · 错误恢复 (全局记忆 + 修复请求)
+
+### 5. Web UI & Real-time Streaming · Web 界面与实时流
+
+NFM-SV provides a modern Chinese-localized Web Dashboard: · NFM-SV 提供现代化的中文 Web 面板：
+
+- 🖥️ FastAPI Server · FastAPI 服务器
+- 📡 WebSocket Streaming · WebSocket 实时流输出
+- 🛑 Stop Button · 停止按钮
+- 📋 Todo Progress · 任务进度条
+- 🔧 AutoFix Visualization · 自动修复可视化
 
 </div>
 
@@ -278,7 +285,7 @@ Safety-first execution · 安全第一的执行流程：
 
 | Feature · 特性 | Description · 描述 |
 |:--------------|:------------------|
-| ⏱️ **Timeout · 超时** | Commands timeout after 30s · 命令 30 秒超时 |
+| ⏱️ **Timeout · 超时** | Default 300s timeout for large operations · 默认 300 秒超时 |
 | 👤 **Approval Required · 审批必需** | Every command needs human approval · 每个命令需人类审批 |
 | 🛑 **Abort Support · 中止支持** | Users can abort at any step · 用户可随时中止 |
 | 🎭 **Mock Mode · 模拟模式** | Test mode without real execution · 无真实执行的测试模式 |
@@ -293,39 +300,22 @@ Safety-first execution · 安全第一的执行流程：
 ```
 Nexus-Frame-Mnemo-Spark-Vibe/
 ├── frame/              # 📐 Graph-based rule engine · 图规则引擎
-│   ├── engine.py       #     RuleNode, RuleEdge, FrameEngine
-│   └── __init__.py
 ├── mnemo/              # 💾 Memory bank · 记忆库
 │   ├── bank.py         #     MemoryBank (file-based) · 基于文件
 │   ├── global_exp.py   #     GlobalMnemo (SQLite) · SQLite 经验库
-│   └── __init__.py
 ├── spark/              # ⚡ Command executor · 命令执行器
-│   ├── executor.py     #     SparkExecutor + WRITE_FILE
-│   ├── git_ops.py      #     GitOps automation · Git 自动化
-│   └── __init__.py
+│   ├── executor.py     #     SparkExecutor (300s timeout) · 增强超时
 ├── vibe/               # 🎨 Human interface · 人机交互
-│   ├── interface.py    #     VibeInterface (HITL)
-│   └── __init__.py
+│   ├── interface.py    #     VibeInterface (Phase 10 + request_fix)
+├── web/                # 🌐 Web UI (Phase 11) · Web 界面
+│   ├── server.py       #     FastAPI Server · 服务器
+│   └── templates/      #     Dashboard HTML · 面板前端
 ├── nexus/              # 🧠 Agent brain · 智能体大脑
-│   ├── brain.py        #     NexusBrain (orchestrator) · 协调器
-│   └── __init__.py
 ├── llm/                # 🤖 AI engine · AI 引擎
-│   ├── local_brain.py  #     LocalBrain (pattern matching) · 模式匹配
-│   └── __init__.py
 ├── knowledge/          # 📚 Knowledge base · 知识库
-│   ├── base.py         #     KnowledgeBase (wiki indexer) · Wiki 索引
-│   ├── code_patterns.py#     Wiki-derived code patterns · Wiki 代码模式
-│   └── __init__.py
 ├── templates/          # 📦 Project scaffolds · 项目脚手架
-│   ├── python/         #     Python project template
-│   └── web/            #     Web project template
-├── memory-bank/        # 💾 Project memory · 项目记忆
-│   ├── plan.md
-│   ├── progress.md
-│   └── tech.md
 ├── nfm_agent.py        # 🧠 NFMSystemAgent · 系统智能体
 ├── main.py             # 🚀 CLI entry point · CLI 入口
-├── config.yaml         # ⚙️ Configuration · 配置
 └── README.md           # 📄 This file
 ```
 
@@ -359,9 +349,9 @@ Nexus-Frame-Mnemo-Spark-Vibe/
 
 <div align="center">
 
-**Built with 🧠 by Synth Agent — Phase 9 Complete**
+**Built with 🧠 by Synth Agent — Phase 11 & Robustness Complete**
 
-_由 Synth Agent 构建 · 第 9 阶段完成_
+_由 Synth Agent 构建 · 第 11 阶段与健壮性修复完成_
 
 <p align="center">
   <img src="https://img.shields.io/badge/⭐-Star%20this%20repo-6C63FF?style=for-the-badge" alt="Star">

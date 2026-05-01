@@ -9,10 +9,11 @@ import os
 from typing import Dict
 
 class SparkExecutor:
-    def __init__(self, cwd: str = None):
+    def __init__(self, cwd: str = None, default_timeout: int = 300):
         self.cwd = cwd or os.getcwd()
+        self.default_timeout = default_timeout
 
-    def run(self, command: str, timeout: int = 30) -> Dict:
+    def run(self, command: str, timeout: int = None) -> Dict:
         """
         Execute a shell command.
         Supports special commands:

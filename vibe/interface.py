@@ -121,6 +121,20 @@ class VibeInterface:
         except EOFError:
             return "abort"
 
+    def request_fix(self, error_msg: str) -> str:
+        """Request a fix command from the user when execution fails."""
+        self._print_rich(f"❌ Execution Failed: {error_msg}", "ERROR")
+        self._print_rich("🔧 Please provide a fix command (shell command) or type 'abort' to stop.", "PLAN")
+        
+        if not self.use_input:
+            # For automated testing, suggest a dummy fix
+            return "echo 'Manual fix applied'"
+
+        try:
+            return input("   > Fix: ").strip()
+        except EOFError:
+            return "abort"
+
     def show_routing(self, model_name: str, reason: str):
         """Show Smart Routing decision (Lovable style)."""
         self._print_rich(f"Routing to {model_name}: {reason}", "INFO")
