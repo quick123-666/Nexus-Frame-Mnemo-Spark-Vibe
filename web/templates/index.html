@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFM-SV Vibe 界面</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; }
+        .header { background: #1e293b; padding: 1rem; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 1.25rem; color: #38bdf8; }
+        .container { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: 300px; background: #1e293b; border-right: 1px solid #334155; padding: 1rem; overflow-y: auto; }
+        .main { flex: 1; display: flex; flex-direction: column; }
+        .chat-area { flex: 1; padding: 1rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; }
+        .input-area { padding: 1rem; border-top: 1px solid #334155; display: flex; gap: 0.5rem; align-items: center; }
+        .input-area input { flex: 1; padding: 0.75rem; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; border-radius: 0.5rem; font-size: 1rem; }
+        .input-area button { padding: 0.75rem 1.25rem; background: #38bdf8; color: #0f172a; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 600; transition: background 0.2s, opacity 0.2s; font-size: 0.9rem; }
+        .input-area button:hover:not(:disabled) { background: #0ea5e9; }
+        .input-area button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .input-area button#stopBtn { background: #ef4444; color: white; }
+        .input-area button#stopBtn:hover:not(:disabled) { background: #dc2626; }
+        
+        /* Dashboard */
+        .dashboard { background: #1e293b; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; }
+        .dashboard h3 { color: #38bdf8; margin-bottom: 0.5rem; font-size: 0.875rem; font-weight: 700; }
+        .dashboard p { font-size: 0.875rem; color: #94a3b8; margin-bottom: 0.5rem; line-height: 1.4; }
+        .confidence { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600; }
+        .confidence.high { background: #22c55e; color: #0f172a; }
+        .confidence.medium { background: #eab308; color: #0f172a; }
+        .confidence.low { background: #ef4444; color: #fff; }
+        
+        /* Todo List */
+        .todo-list { list-style: none; margin-top: 0.5rem; }
+        .todo-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid #334155; font-size: 0.875rem; }
+        .todo-item:last-child { border-bottom: none; }
+        .todo-icon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; }
+        .todo-icon.done { color: #22c55e; }
+        .todo-icon.active { color: #eab308; animation: pulse 1.5s infinite; }
+        .todo-icon.pending { color: #64748b; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        
+        /* Messages */
+        .message { padding: 0.75rem 1rem; border-radius: 0.5rem; max-width: 85%; line-height: 1.6; word-wrap: break-word; }
+        .message.system { background: #1e293b; color: #cbd5e1; align-self: flex-start; border-bottom-left-radius: 0; }
+        .message.user { background: #38bdf8; color: #0f172a; align-self: flex-end; border-bottom-right-radius: 0; font-weight: 500; }
+        .message.success { background: #1e293b; color: #22c55e; border-left: 3px solid #22c55e; }
+        .message.error { background: #1e293b; color: #ef4444; border-left: 3px solid #ef4444; }
+        .message code { background: #0f172a; padding: 0.15rem 0.3rem; border-radius: 0.25rem; font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.85rem; }
+        .message pre { background: #0f172a; padding: 0.75rem; border-radius: 0.5rem; overflow-x: auto; margin-top: 0.5rem; border: 1px solid #334155; }
+        
+        /* Routing & AutoFix */
+        .indicator { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.5rem 0.75rem; background: #1e293b; border-radius: 0.5rem; font-size: 0.8rem; margin: 0.25rem 0; }
+        .indicator.routing { border-left: 3px solid #38bdf8; }
+        .indicator.autofix { border-left: 3px solid #22c55e; }
+        .indicator strong { color: #e2e8f0; }
+        .indicator small { color: #94a3b8; font-size: 0.75rem; }
+        
+        /* Status */
+        .status { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: #94a3b8; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+        .status-dot.connected { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+        .status-dot.error { background: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 NFM-SV Vibe 界面</h1>
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">未连接</span>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="sidebar">
+            <div class="dashboard">
+                <h3>📋 当前计划</h3>
+                <p id="planText">等待任务输入...</p>
+            </div>
+            <div class="dashboard">
+                <h3>🚀 执行进度</h3>
+                <p id="progressText">准备就绪</p>
+                <span class="confidence low" id="confidenceBadge">0%</span>
+            </div>
+            <div class="dashboard">
+                <h3>✅ 任务清单</h3>
+                <ul class="todo-list" id="todoList">
+                    <li class="todo-item"><span class="todo-icon pending">○</span> 等待中...</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="main">
+            <div class="chat-area" id="chatArea">
+                <div class="message system">欢迎使用 NFM-SV Vibe 界面。请输入任务以开始。</div>
+            </div>
+            <div class="input-area">
+                <input type="text" id="taskInput" placeholder="请描述你的任务..." />
+                <button id="sendBtn">发送</button>
+                <button id="stopBtn">■ 停止</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatArea = document.getElementById('chatArea');
+        const taskInput = document.getElementById('taskInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const planText = document.getElementById('planText');
+        const progressText = document.getElementById('progressText');
+        const confidenceBadge = document.getElementById('confidenceBadge');
+        const todoList = document.getElementById('todoList');
+
+        let ws = null;
+        let sessionId = null;
+        let isRunning = false;
+
+        function setRunning(running) {
+            isRunning = running;
+            taskInput.disabled = running;
+            sendBtn.disabled = running;
+            stopBtn.disabled = !running; // 运行时可用，空闲时禁用
+        }
+
+        function stopTask() {
+            if (ws) {
+                ws.onclose = null; // 防止自动重连
+                ws.close();
+            }
+            addMessage('🛑 任务已被用户中止。', 'system');
+            setRunning(false);
+        }
+
+        function connectWebSocket() {
+            if (ws) ws.close();
+            
+            ws = new WebSocket(`ws://${window.location.host}/ws/${sessionId || 'default'}`);
+            
+            ws.onopen = () => {
+                statusDot.className = 'status-dot connected';
+                statusText.textContent = '已连接';
+            };
+            
+            ws.onclose = () => {
+                statusDot.className = 'status-dot error';
+                statusText.textContent = '未连接';
+                if (isRunning) setRunning(false);
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+        }
+
+        function handleWebSocketMessage(data) {
+            switch(data.type) {
+                case 'dashboard':
+                    planText.textContent = data.plan || '暂无计划';
+                    progressText.textContent = data.progress || '准备就绪';
+                    const conf = Math.round(data.confidence * 100);
+                    confidenceBadge.textContent = `${conf}%`;
+                    confidenceBadge.className = `confidence ${conf > 80 ? 'high' : conf > 50 ? 'medium' : 'low'}`;
+                    break;
+                    
+                case 'message':
+                    addMessage(data.text, data.style);
+                    break;
+                    
+                case 'routing':
+                    addIndicator('routing', `路由至 ${data.model}`, data.reason);
+                    break;
+                    
+                case 'autofix':
+                    addIndicator('autofix', `自动修复: ${data.issue}`, `已应用: ${data.fix}`);
+                    break;
+                    
+                case 'todos_update':
+                    updateTodos(data.todos, -1);
+                    break;
+                    
+                case 'todo_advance':
+                    updateTodos(null, data.index);
+                    break;
+                    
+                case 'stream_output':
+                    addCodeBlock(data.content, data.label);
+                    break;
+                    
+                case 'complete':
+                    addMessage(`✅ ${data.message}`, 'success');
+                    setRunning(false);
+                    break;
+                    
+                case 'error':
+                    addMessage(`❌ 错误: ${data.message}`, 'error');
+                    setRunning(false);
+                    break;
+            }
+        }
+
+        function addMessage(text, style = 'system') {
+            const msg = document.createElement('div');
+            msg.className = `message ${style}`;
+            msg.textContent = text;
+            chatArea.appendChild(msg);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function addIndicator(type, title, subtitle) {
+            const ind = document.createElement('div');
+            ind.className = `indicator ${type}`;
+            ind.innerHTML = `<strong>${title}</strong><small>${subtitle}</small>`;
+            chatArea.appendChild(ind);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function addCodeBlock(content, label) {
+            const msg = document.createElement('div');
+            msg.className = 'message system';
+            msg.innerHTML = `<strong>📤 ${label}</strong><pre><code>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
+            chatArea.appendChild(msg);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function updateTodos(todos, activeIndex) {
+            if (todos) {
+                todoList.innerHTML = '';
+                todos.forEach((todo, i) => {
+                    const li = document.createElement('li');
+                    li.className = 'todo-item';
+                    const icon = i < activeIndex ? '✓' : i === activeIndex ? '➤' : '○';
+                    const cls = i < activeIndex ? 'done' : i === activeIndex ? 'active' : 'pending';
+                    li.innerHTML = `<span class="todo-icon ${cls}">${icon}</span><span>${todo}</span>`;
+                    todoList.appendChild(li);
+                });
+            } else if (activeIndex >= 0) {
+                const items = todoList.querySelectorAll('.todo-item');
+                items.forEach((item, i) => {
+                    const icon = item.querySelector('.todo-icon');
+                    const span = item.querySelector('span:last-child');
+                    if (i < activeIndex) {
+                        icon.className = 'todo-icon done';
+                        icon.textContent = '✓';
+                    } else if (i === activeIndex) {
+                        icon.className = 'todo-icon active';
+                        icon.textContent = '➤';
+                    } else {
+                        icon.className = 'todo-icon pending';
+                        icon.textContent = '○';
+                    }
+                });
+            }
+        }
+
+        async function sendTask() {
+            const task = taskInput.value.trim();
+            if (!task) return;
+            
+            addMessage(task, 'user');
+            taskInput.value = '';
+            
+            try {
+                setRunning(true);
+                const res = await fetch('/api/task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task, context_tags: ['general'] })
+                });
+                const data = await res.json();
+                sessionId = data.session_id;
+                connectWebSocket();
+            } catch (err) {
+                addMessage(`任务启动失败: ${err.message}`, 'error');
+                setRunning(false);
+            }
+        }
+
+        sendBtn.addEventListener('click', sendTask);
+        stopBtn.addEventListener('click', stopTask);
+        taskInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendTask();
+        });
+
+        // Initial connection
+        connectWebSocket();
+    </script>
+</body>
+</html>
