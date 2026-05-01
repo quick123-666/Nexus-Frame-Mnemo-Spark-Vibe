@@ -1,0 +1,20 @@
+# Nexus-Frame-Mnemo-Spark-Vibe Configuration
+
+project:
+  name: "nexus-frame-mnemo-spark-vibe"
+  memory_bank_path: "./memory-bank"
+  rules_path: "./frame/rules"
+
+llm:
+  provider: "zhipu" # OpenAI compatible
+  base_url: "http://localhost:28789/v1"
+  api_key: "placeholder"
+  model: "glm-4-flash"
+
+frame:
+  db_path: "./frame/rules.db"
+  default_rules:
+    - id: "base_01"
+      content: "Always use Python type hints."
+      weight: 10
+      triggers: ["python"]
