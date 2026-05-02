@@ -6,10 +6,10 @@ project:
   rules_path: "./frame/rules"
 
 llm:
-  provider: "zhipu" # OpenAI compatible
-  base_url: "http://localhost:28789/v1"
-  api_key: "placeholder"
-  model: "glm-4-flash"
+  provider: "openai"  # OpenAI compatible
+  base_url: "https://api.scnet.cn/api/llm/v1"
+  api_key: "sk-sp-NjMyLTExMTI0NjkwMzMyLTE3Nzc2ODkzNjkxNzg="
+  model: "MiniMax-M2.5"
 
 frame:
   db_path: "./frame/rules.db"

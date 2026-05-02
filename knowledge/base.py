@@ -59,7 +59,7 @@ class KnowledgeBase:
     
     def _scan_and_index(self) -> bool:
         """扫描 wiki 目录并建立索引"""
-        print(f"📚 扫描知识库: {self.wiki_path}")
+        print(f"Scanning Knowledge Base: {self.wiki_path}")
         
         self.documents = []
         self.keyword_index = {}
@@ -74,9 +74,9 @@ class KnowledgeBase:
                     self.documents.append(doc)
                     self._update_keyword_index(len(self.documents) - 1, doc)
             except Exception as e:
-                print(f"  ⚠️  跳过 {md_file.name}: {e}")
+                print(f"  Skipped {md_file.name}: {e}")
         
-        print(f"✅ 索引完成: {len(self.documents)} 个文档, {len(self.keyword_index)} 个关键词")
+        print(f"Indexing complete: {len(self.documents)} documents, {len(self.keyword_index)} keywords")
         
         # 保存缓存
         if self.index_file:
@@ -270,10 +270,10 @@ class KnowledgeBase:
             ]
             self.keyword_index = cache_data["keyword_index"]
             
-            print(f"✅ 从缓存加载: {len(self.documents)} 个文档")
+            print(f"Loaded from cache: {len(self.documents)} documents")
             return True
         except Exception as e:
-            print(f"⚠️  缓存加载失败: {e}")
+            print(f"Cache load failed: {e}")
             return False
     
     def get_stats(self) -> Dict:

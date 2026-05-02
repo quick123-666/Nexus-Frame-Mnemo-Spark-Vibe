@@ -46,11 +46,11 @@ class NexusBrain:
             index_file = Path(__file__).parent.parent / "knowledge_index.json"
             
             if wiki_path.exists():
-                print(f"📚 加载知识库: {wiki_path}")
+                print(f"Loading Knowledge Base: {wiki_path}")
                 knowledge_base = KnowledgeBase(wiki_path=str(wiki_path), index_file=str(index_file))
                 knowledge_base.load()
             else:
-                print("⚠️  未找到 LLM Wiki，知识库功能未启用")
+                print("Warning: LLM Wiki not found, knowledge base disabled.")
                 knowledge_base = None
         
         self.knowledge_base = knowledge_base
@@ -110,20 +110,20 @@ class NexusBrain:
         # 2. 让 LocalBrain 决定下一步
         decision = self.local_brain.decide_next_command(ai_ctx)
         
-        print(f"🧠 [LocalBrain] {decision.reasoning}")
+        print(f"[LocalBrain] {decision.reasoning}")
         print(f"   建议命令: {decision.command}")
         print(f"   置信度: {decision.confidence:.0%}")
-        print(f"   知识库: {'✅ 已使用' if decision.knowledge_used else '❌ 未使用'}")
-        print(f"   Wiki 代码模式: {'✅ 已应用' if decision.code_guidance else '❌ 未应用'}")
+        print(f"   知识库: {'[已使用]' if decision.knowledge_used else '[未使用]'}")
+        print(f"   Wiki 代码模式: {'[已应用]' if decision.code_guidance else '[未应用]'}")
         
         # 显示代码指导
         if decision.code_guidance:
-            print(f"\n📚 Wiki 代码生成指导:")
+            print(f"\n[Wiki] 代码生成指导:")
             print(f"{decision.code_guidance[:600]}...\n")
         
         # 3. 如果需要人工输入
         if decision.command == "ASK_USER":
-            print(f"\n📋 上下文摘要:")
+            print(f"\n[Context] 上下文摘要:")
             print(self.local_brain.format_context_for_ai(ai_ctx))
             
             user_input = self.vibe.request_input("请输入要执行的命令 (或 'abort'):")
@@ -142,34 +142,34 @@ class NexusBrain:
         
         # 特殊处理：如果用户命令包含"无效"或"错误"，故意执行失败命令来测试错误恢复
         if "无效" in user_command or "错误" in user_command or "invalid" in user_command.lower():
-            print("🧪 [测试模式] 故意执行会失败的命令...")
+            print("[Test Mode] Forcing failing command...")
             final_command = "xyz_nonexistent_command_123"
         
         # 4. 执行命令
-        print(f"⚡ [Spark] 执行: {final_command}")
+        print(f"[Spark] 执行: {final_command}")
         result = self.spark.run(final_command)
 
         if result["status"] == "ok":
-            print(f"✅ [Spark] 成功.")
+            print(f"[Spark] 成功.")
             self.git.add_all()
             self.git.commit(f"feat: {final_command}")
-            self.memory.write("progress.md", self.memory.read("progress.md") + f"\n- ✅ 完成: {final_command}")
+            self.memory.write("progress.md", self.memory.read("progress.md") + f"\n- [OK] 完成: {final_command}")
             return {"status": "ok", "output": result["output"]}
         else:
             # 5. 错误处理 - 使用 LocalBrain 分析
-            print("🧠 [LocalBrain] 分析错误...")
+            print("[LocalBrain] 分析错误...")
             fix_decision = self.local_brain.fix_error(result["error"], ai_ctx)
             
             fix_cmd = None
             
             # 先查询全局经验库
             if not fix_decision.command or fix_decision.command == "ASK_USER":
-                print("🔍 [Nexus] 搜索全局经验库...")
+                print("[Nexus] 搜索全局经验库...")
                 solutions = self.global_memory.search_solutions(result["error"], context_tags)
                 
                 if solutions:
                     best_sol = solutions[0]
-                    print(f"💡 找到 {best_sol['frequency']} 个历史匹配!")
+                    print(f"Found {best_sol['frequency']} historical matches!")
                     print(f"   建议方案: {best_sol['solution']}")
                     
                     auto_apply = self.vibe.request_approval("应用历史方案？(y/n)")
@@ -178,7 +178,7 @@ class NexusBrain:
             
             # 如果 LocalBrain 有建议
             if not fix_cmd and fix_decision.command != "ASK_USER":
-                print(f"🤖 AI 建议修复: {fix_decision.command}")
+                print(f"[AI] 建议修复: {fix_decision.command}")
                 apply_fix = self.vibe.request_approval("应用 AI 修复方案？(y/n)")
                 if apply_fix.lower() == 'y':
                     fix_cmd = fix_decision.command
@@ -190,17 +190,17 @@ class NexusBrain:
             if fix_cmd.lower() == "abort":
                 return {"status": "aborted", "reason": "Fix aborted"}
             
-            print(f"🔧 [Spark] 重试: {fix_cmd}")
+            print(f"[Spark] 重试: {fix_cmd}")
             retry_res = self.spark.run(fix_cmd)
             
             if retry_res["status"] == "ok":
-                print(f"✅ [Spark] 修复成功.")
+                print(f"[Spark] 修复成功.")
                 self.git.add_all()
                 self.git.commit(f"fix: {fix_cmd}")
                 
                 # 保存到全局经验库
                 self.global_memory.add_experience(result["error"], fix_cmd, context_tags)
-                print("🧠 [Global Mnemo] 经验已保存.")
+                print("[Global Mnemo] 经验已保存.")
                 
                 return {"status": "ok", "output": retry_res["output"]}
             else:

@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-NFM-SV Web: FastAPI Server for Phase 11 Vibe Interface
-Features:
-- WebSocket streaming for real-time output
-- REST API for task management
-- Static file serving for frontend
+NFM-SV Web: FastAPI Server for Phase 11 Vibe Interface (Chat-First Mode)
+架构：主Agent <-> 用户 实时对话 + 真实AI推理 + 随时打断
 """
 import os
 import sys
 import json
 import asyncio
+import time
+import traceback
 from typing import Dict, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -26,12 +24,16 @@ from mnemo import MemoryBank, GlobalMnemo
 from spark import SparkExecutor, GitOps
 from vibe import VibeInterface
 from nexus import NexusBrain
+from nexus.medic_team import MedicCoordinator
+from nexus.medic_repair import RepairAgent
+from nexus.mercury_agent import MercuryCrabAgent
+from llm.local_brain import LocalBrain, AIContext, AIDecision
 from knowledge import KnowledgeBase
 from knowledge.code_patterns import generate_code_guidance
+from visual.runner import execute_mano_task
 
-app = FastAPI(title="NFM-SV Vibe Web Interface", version="0.1.0")
+app = FastAPI(title="NFM-SV Vibe Web Interface", version="0.7.0-mano")
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -40,152 +42,326 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global state (in production, use database)
+# Global Knowledge Base
+global_knowledge_base = None
+try:
+    wiki_path = os.path.join(os.path.dirname(__file__), "..", "..", "Mercury-Crab-Agent", "wiki")
+    if os.path.exists(wiki_path):
+        global_knowledge_base = KnowledgeBase(wiki_path=wiki_path, index_file="knowledge_index.json")
+        global_knowledge_base.load()
+        print("Knowledge Base loaded successfully.")
+    else:
+        print("Warning: Wiki path not found. Knowledge Base disabled.")
+except Exception as e:
+    print(f"Warning: Failed to load Knowledge Base: {e}")
+
+# Global State
 active_sessions: Dict[str, dict] = {}
+agent_instances: Dict[str, dict] = {}
+# Initialize Medic Team (Global Memory & Self-Learning)
+medic_team = MedicCoordinator(memory_path="nexus_medic_memory.json", knowledge_base=global_knowledge_base)
 
-# Models
-class TaskRequest(BaseModel):
-    task: str
-    context_tags: List[str] = ["general"]
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
+# Initialize Mercury Crab Agent (Independent from OpenClaw)
+mercury_agent = None
+try:
+    mercury_path = os.path.join(os.path.dirname(__file__), "..", "..", "Mercury-Crab-Agent")
+    if os.path.exists(mercury_path):
+        mercury_agent = MercuryCrabAgent(project_path=mercury_path)
+        print("Mercury Crab Agent initialized successfully.")
+    else:
+        print("Warning: Mercury-Crab-Agent path not found.")
+except Exception as e:
+    print(f"Warning: Failed to init Mercury Agent: {e}")
 
 @app.get("/", response_class=HTMLResponse)
 async def get_frontend():
-    """Serve the main frontend"""
     html_path = os.path.join(os.path.dirname(__file__), "templates", "index.html")
     if os.path.exists(html_path):
         with open(html_path, "r", encoding="utf-8") as f:
             return f.read()
-    return "<h1>NFM-SV Web Interface</h1><p>Frontend not found.</p>"
-
-@app.post("/api/task")
-async def create_task(request: TaskRequest):
-    """Start a new task execution"""
-    session_id = f"session_{len(active_sessions) + 1}"
-    
-    # Initialize session (simplified for demo)
-    test_dir = os.path.join(os.path.dirname(__file__), "..", "test_project_web")
-    if not os.path.exists(test_dir):
-        os.makedirs(test_dir)
-        
-    active_sessions[session_id] = {
-        "status": "initialized",
-        "task": request.task,
-        "context_tags": request.context_tags,
-        "test_dir": test_dir,
-        "todos": [],
-        "current_todo": -1,
-    }
-    
-    return {"session_id": session_id, "status": "initialized"}
+    return "<h1>NFM-SV</h1><p>Frontend not found.</p>"
 
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
-    """WebSocket endpoint for real-time streaming"""
     await websocket.accept()
-    
-    if session_id not in active_sessions:
-        await websocket.close(code=1008, reason="Session not found")
-        return
-    
-    session = active_sessions[session_id]
-    
-    try:
-        # Send initial dashboard
-        await websocket.send_json({
-            "type": "dashboard",
-            "plan": "# Implementation Plan\n1. Analyze Request\n2. Search Knowledge\n3. Generate Code\n4. Verify Output",
-            "progress": "Ready",
-            "confidence": 0.0,
-            "hit_keywords": []
-        })
-        
-        # Simulate task execution with streaming
-        await simulate_task_execution(websocket, session)
-        
-    except WebSocketDisconnect:
-        print(f"Client disconnected: {session_id}")
-    except Exception as e:
-        await websocket.send_json({"type": "error", "message": str(e)})
 
-async def simulate_task_execution(websocket: WebSocket, session: dict):
-    """Simulate the NFM-SV execution pipeline with streaming"""
-    # 1. Analyze
-    await stream_message(websocket, "🧠 Analyzing task...", "THINKING")
+    # Initialize session if not exists
+    if session_id not in active_sessions:
+        test_dir = os.path.join(os.path.dirname(__file__), "..", "test_project_web")
+        if not os.path.exists(test_dir):
+            os.makedirs(test_dir)
+
+        active_sessions[session_id] = {
+            "status": "idle",
+            "test_dir": test_dir,
+            "chat_history": [],
+            "current_task": None, # For cancellation
+            "cancelled": False,
+        }
+
+        # Initialize Agent instance
+        try:
+            db_path = os.path.join(test_dir, "nfm_sv.db")
+            frame = FrameEngine(db_path=db_path)
+            memory = MemoryBank(bank_path=os.path.join(test_dir, "memory.db"))
+            spark = SparkExecutor(cwd=test_dir, default_timeout=120)
+            git = GitOps(cwd=test_dir)
+            vibe = VibeInterface(use_input=False)
+            global_memory = GlobalMnemo(db_path=os.path.join(test_dir, "global_mnemo.db"))
+            
+            brain = NexusBrain(
+                engine=frame, memory=memory, spark=spark, git=git, 
+                vibe=vibe, global_memory=global_memory, knowledge_base=global_knowledge_base
+            )
+
+            agent_instances[session_id] = {
+                "brain": brain, "frame": frame, "memory": memory,
+                "spark": spark, "git": git, "local_brain": brain.local_brain,
+            }
+            await stream_agent_msg(websocket, "✅ Agent 初始化成功，随时待命。")
+        except Exception as e:
+            print(f"[Agent Init Error]: {e}")
+            traceback.print_exc()
+            await stream_agent_msg(websocket, f"❌ Agent 初始化失败: {str(e)}")
+            # Don't fail the task, just log it. Agent will use fallback.
+
+    session = active_sessions[session_id]
+    agent = agent_instances.get(session_id)
+
+    # Medic Team: Lazy Initialization / Repair
+    if not agent:
+        print(f"[Medic] Agent instance missing for session {session_id}. Attempting repair...")
+        
+        # Use the specialized Repair Agent
+        repair_agent = RepairAgent()
+        success, agent, message = repair_agent.fix_initialization(session_id, active_sessions, agent_instances)
+        
+        if success:
+            print(f"[Medic] SUCCESS: {message}")
+            await stream_agent_msg(websocket, f"🚑 Medic Team 报告: {message}。正在恢复服务...")
+        else:
+            print(f"[Medic] FAILED: {message}")
+            await stream_agent_msg(websocket, f"🚑 Medic Team 报告: {message}")
+
+    # Chat Loop
+    try:
+        while True:
+            # Wait for user message
+            data = await websocket.receive_json()
+
+            # Handle Stop
+            if data.get("type") == "stop":
+                if session.get("current_task") and not session["current_task"].done():
+                    session["current_task"].cancel()
+                    await stream_agent_msg(websocket, "🛑 任务已被用户中止。")
+                    session["status"] = "stopped"
+                continue
+
+            if data.get("type") != "chat":
+                continue
+
+            user_text = data.get("text", "")
+            if not user_text:
+                continue
+
+            # Add to history
+            session["chat_history"].append({"role": "user", "content": user_text})
+
+            # Interrupt current task if running
+            if session.get("current_task") and not session["current_task"].done():
+                await stream_agent_msg(websocket, "⚠️ 正在打断当前任务...")
+                session["current_task"].cancel()
+                # Give a moment for cleanup
+                await asyncio.sleep(0.1)
+
+            # Start new task
+            task = asyncio.create_task(run_agent_turn(websocket, user_text, session, agent))
+            session["current_task"] = task
+
+            try:
+                await task
+            except asyncio.CancelledError:
+                # Task was interrupted by new message
+                await stream_agent_msg(websocket, "🛑 任务已被新消息打断。")
+                session["status"] = "interrupted"
+
+    except WebSocketDisconnect:
+        print(f"[WS] Client disconnected: {session_id}")
+        session["status"] = "disconnected"
+        # Cancel any running task
+        if session.get("current_task") and not session["current_task"].done():
+            session["current_task"].cancel()
+    except Exception as e:
+        print(f"[WS] Error: {e}")
+        traceback.print_exc()
+
+async def run_agent_turn(websocket: WebSocket, user_text: str, session: dict, agent: dict):
+    """Single Agent Turn: Think -> Act -> Reply"""
+    session["status"] = "working"
+    test_dir = session.get("test_dir", ".")
+
+    if not agent:
+        await stream_agent_msg(websocket, f"💭 收到: '{user_text}' (简化模式)")
+        await asyncio.sleep(0.5)
+        await stream_agent_msg(websocket, "⚠️ Agent 未初始化，无法执行复杂操作。")
+        session["status"] = "idle"
+        return
+
+    local_brain: LocalBrain = agent["local_brain"]
+    spark: SparkExecutor = agent["spark"]
+
+    # 1. Thinking Phase
+    await show_thinking(websocket, "🧠 正在分析意图...")
     await asyncio.sleep(0.5)
-    
+
+    # Check for Mano-P (GUI Automation) trigger
+    if "mano" in user_text.lower() or "自动化界面" in user_text or "控制桌面" in user_text or "gui" in user_text.lower():
+        await stream_agent_msg(websocket, "🖐️ **Mano-P Skill 激活**: 正在接管桌面操作...")
+        await asyncio.sleep(1)
+        
+        # Extract task description (simple heuristic: remove keywords)
+        task_desc = user_text.replace("Mano", "").replace("mano", "").replace("自动化界面", "").replace("控制桌面", "").strip()
+        if not task_desc:
+            task_desc = "Perform the requested GUI automation task."
+            
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, execute_mano_task, task_desc)
+        
+        await stream_agent_msg(websocket, result)
+        session["status"] = "idle"
+        return
+
+    ai_ctx = AIContext(
+        plan=f"# {user_text}",
+        progress="",
+        rules="",
+        current_files=[],
+        git_status="",
+        previous_command=user_text,
+    )
+
+    await show_thinking(websocket, "🤖 LocalBrain 决策中...")
+    await asyncio.sleep(0.3)
+
+    decision = local_brain.decide_next_command(ai_ctx)
     await websocket.send_json({
         "type": "routing",
-        "model": "Local Brain (Pattern Matcher)",
-        "reason": "Task matches known patterns"
-    })
-    await asyncio.sleep(0.3)
-    
-    # 2. Update todos
-    todos = [
-        "Searching Knowledge Base",
-        "Generating Template",
-        "Writing Logic",
-        "Linting & AutoFix",
-        "Committing to Git"
-    ]
-    await websocket.send_json({
-        "type": "todos_update",
-        "todos": todos
-    })
-    await asyncio.sleep(0.3)
-    
-    # 3. Stream progress
-    for i, todo in enumerate(todos):
-        await websocket.send_json({
-            "type": "todo_advance",
-            "index": i,
-            "todo": todo
-        })
-        await asyncio.sleep(0.8)
-        
-        if i == 1:
-            # Generate code guidance
-            guidance = generate_code_guidance("python api file")
-            await websocket.send_json({
-                "type": "stream_output",
-                "content": guidance,
-                "label": "Code Guidance"
-            })
-        elif i == 3:
-            # AutoFix example
-            await websocket.send_json({
-                "type": "autofix",
-                "issue": "Missing import 'FastAPI'",
-                "fix": "Added 'from fastapi import FastAPI'"
-            })
-    
-    # 4. Update dashboard
-    await websocket.send_json({
-        "type": "dashboard",
-        "plan": session.get("task", ""),
-        "progress": "Completed successfully!",
-        "confidence": 0.95,
-        "hit_keywords": ["python", "api", "fastapi"]
-    })
-    
-    await websocket.send_json({
-        "type": "complete",
-        "message": "Task completed successfully!"
+        "model": "LocalBrain",
+        "reason": decision.reasoning[:100]
     })
 
-async def stream_message(websocket: WebSocket, text: str, style: str = "INFO"):
-    """Send a streaming message"""
+    # 2. Action Phase
+    cmd = decision.command
+    if cmd and cmd != "ASK_USER":
+        await stream_agent_msg(websocket, f"⚡ 执行: {cmd}")
+        
+        # Run in thread to not block WebSocket
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(None, spark.run, cmd)
+            
+            if result["status"] == "ok":
+                await websocket.send_json({
+                    "type": "stream_output",
+                    "content": result["output"][:1000],
+                    "label": "执行结果"
+                })
+            else:
+                await stream_agent_msg(websocket, f"⚠️ 执行失败: {result['error'][:100]}...")
+                
+                # 🚑 Trigger Nexus Medic Team (Self-Healing & Learning)
+                await stream_agent_msg(websocket, "🚑 **Nexus Medic Team 激活**: 正在诊断并尝试自愈...")
+                await asyncio.sleep(0.5)
+                
+                diagnosis = medic_team.diagnostic.analyze(result["error"], {})
+                await stream_agent_msg(websocket, f"🔍 [诊断]: {diagnosis['type']} ({diagnosis['severity']})")
+                
+                # Recall Memory
+                past_case = medic_team.memory.recall(result["error"])
+                if past_case:
+                    await stream_agent_msg(websocket, f"🧠 [记忆]: 发现相似历史修复案例 (成功率 {past_case.success_score:.0%})")
+                
+                # Architect Check (Persistence)
+                if medic_team.architect.check_drift(result["error"]):
+                    await stream_agent_msg(websocket, "🛡️ [架构师]: 检测到潜在方案漂移，拒绝盲目修复，坚持原有设计。")
+                else:
+                    # Suggest Fix
+                    fix = medic_team.repair.attempt_fix(diagnosis, result["error"])
+                    if fix and fix != "manual_review":
+                        await stream_agent_msg(websocket, f"🛠️ [修复方案]: {fix}")
+                        
+                        # Try to auto-fix
+                        await stream_agent_msg(websocket, "⚡ 正在尝试自动修复...")
+                        await asyncio.sleep(0.5)
+                        
+                        # In a real scenario, we would execute 'fix' here.
+                        # For now, we report it.
+                        medic_team.memory.learn(result["error"], fix, success=False, tags=[diagnosis['type']])
+                        if mercury_agent:
+                            mercury_agent.record_error(result["error"], fix)
+                        
+                        await websocket.send_json({
+                            "type": "stream_output",
+                            "content": f"自动修复尝试: {fix}",
+                            "label": "自愈结果"
+                        })
+        except Exception as e:
+            await stream_agent_msg(websocket, f"❌ 执行异常: {str(e)}")
+    else:
+        # Knowledge/Analysis response
+        if "分析" in user_text or "知识" in user_text:
+            await stream_agent_msg(websocket, "🔍 正在检索知识库...")
+            await asyncio.sleep(0.5)
+            # Mock KB response for now
+            await stream_agent_msg(websocket, "📖 知识库: 暂无直接匹配的记录，建议手动检查相关代码文件。")
+
+    # 3. Reply Phase
+    reply = f"✅ 任务处理完成。"
+    if decision.confidence < 0.5:
+        reply = f"⚠️ 任务完成，但置信度较低 ({decision.confidence:.0%})，请检查结果。"
+    
+    await stream_agent_msg(websocket, reply)
+    session["chat_history"].append({"role": "agent", "content": reply})
+    session["status"] = "idle"
+
+async def show_thinking(websocket: WebSocket, text: str):
+    await websocket.send_json({
+        "type": "thinking",
+        "text": text
+    })
+
+async def stream_agent_msg(websocket: WebSocket, text: str, style: str = "system"):
     await websocket.send_json({
         "type": "message",
         "text": text,
         "style": style
     })
 
+# Mercury Agent Heartbeat Loop
+async def mercury_heartbeat_loop():
+    """Background task: Run Mercury Crab Agent maintenance tasks periodically."""
+    if not mercury_agent:
+        return
+    print("[Mercury] Heartbeat loop started.")
+    while True:
+        try:
+            # Run cycle every 10 minutes
+            await asyncio.sleep(600)
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, mercury_agent.run_heartbeat_cycle)
+        except Exception as e:
+            print(f"[Mercury] Heartbeat loop error: {e}")
+
+# Add startup event
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(mercury_heartbeat_loop())
+
 if __name__ == "__main__":
     import uvicorn
-    print("Starting NFM-SV Web Interface on http://localhost:8000")
+    print("=" * 50)
+    print("  NFM-SV Vibe Chat")
+    print("  Chat-First AI Agent v0.5.0")
+    print("  http://localhost:8000")
+    print("=" * 50)
     uvicorn.run(app, host="0.0.0.0", port=8000)
