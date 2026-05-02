@@ -279,6 +279,42 @@ NFM-SV provides a modern Chinese-localized Web Dashboard: · NFM-SV 提供现代
 
 ---
 
+## 💡 Why NFM-SV? · 为什么选择 NFM-SV
+
+<div align="center">
+
+### 1. 解决传统 AI 开发的痛点 (Solving Traditional AI Pain Points)
+
+Traditional AI development often suffers from memory loss, hallucinations, and context pollution. NFM-SV introduces an industrial-grade engineering workflow to solve these issues.
+
+传统 AI 开发常遇到失忆、幻觉和上下文污染等问题。NFM-SV 引入工业级工程工作流来解决这些问题：
+
+| Pain Point · 痛点 | NFM-SV Solution · 解决方案 | Core Advantage · 核心优势 |
+| :--- | :--- | :--- |
+| **AI Amnesia · 失忆** | **Mnemo (Persistent Memory)**: `Memory Bank` keeps architecture and progress forever. | 记忆永久化，跨会话连贯 (Permanent memory across sessions) |
+| **Code Corruption · 改乱代码** | **Frame + Explain-Before-Fix**: Analyzes dependency graphs before changes. | 拒绝盲改，安全修复 (Refusal to modify blindly) |
+| **Context Pollution · 上下文污染** | **Nexus (Dynamic Injection)**: Injects only relevant modules for the current task. | 极高 Token 效率 (Extreme Token efficiency) |
+| **No Rollback · 无法回滚** | **Spark (Smart Rollback)**: Auto-commits and tags every step; rolls back on failure. | 安全底线，无限试错 (Safe bottom line for trial & error) |
+| **Lack of Control · 缺乏流程管控** | **SOP Workflow**: Strict Plan -> Execute -> Verify -> Archive cycle. | 工业化生产标准 (Industrial production standard) |
+
+### 2. 标准开发工作流 (Standard Development SOP)
+
+NFM-SV transforms "coding" into "engineering management" through a standardized loop.
+
+NFM-SV 通过标准化的循环将“写代码”转变为“工程管理”：
+
+1.  **Init (初始化)**: Generate `PRD`, select tech stack, and initialize `Memory Bank`.
+2.  **Plan Loop (规划循环)**: Architect Agent generates `plan.md` -> Human (HITL) confirms.
+3.  **Exec Loop (执行循环)**:
+    *   Agent executes step-by-step using `run_shell` and `write_file`.
+    *   Auto-updates `progress.md` and `git commit` + "Clear" history.
+4.  **Verify & Fix (验证与修复)**:
+    *   `DiagnosticAgent` & `RepairAgent` handle failures automatically.
+
+</div>
+
+---
+
 ## 🛡️ Safety Features · 安全特性
 
 <div align="center">
