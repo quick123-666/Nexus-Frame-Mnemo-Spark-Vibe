@@ -658,6 +658,32 @@
                     <span class="tag">等待分析...</span>
                 </div>
             </div>
+
+            <!-- Mercury Card -->
+            <div class="card">
+                <div class="card-title">🦀 Mercury 记忆层</div>
+                <div class="card-body" id="mercuryStatus">
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-muted);">HOT</span>
+                            <span id="mercuryHot" style="color: var(--accent-light);">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-muted);">WARM</span>
+                            <span id="mercuryWarm" style="color: var(--accent-cyan);">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-muted);">COLD</span>
+                            <span id="mercuryCold" style="color: var(--text-secondary);">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-muted);">Skills</span>
+                            <span id="mercurySkills" style="color: var(--success);">--</span>
+                        </div>
+                    </div>
+                    <div class="tag-list" id="mercurySkillTags" style="margin-top: 8px;"></div>
+                </div>
+            </div>
         </aside>
 
         <!-- MAIN -->
@@ -719,41 +745,60 @@
     </div>
 
     <script>
-        // DOM Elements
-        const chatArea = document.getElementById('chatArea');
-        const taskInput = document.getElementById('taskInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const statusDot = document.getElementById('statusDot');
-        const statusText = document.getElementById('statusText');
-        const planText = document.getElementById('planText');
-        const progressText = document.getElementById('progressText');
-        const progressFill = document.getElementById('progressFill');
-        const confidenceBadge = document.getElementById('confidenceBadge');
-        const todoList = document.getElementById('todoList');
-        const knowledgeTags = document.getElementById('knowledgeTags');
-        const codeOutput = document.getElementById('codeOutput');
-        const codeBlock = document.getElementById('codeBlock');
-        const codeEmptyState = document.getElementById('codeEmptyState');
-        const logsOutput = document.getElementById('logsOutput');
-        const logsEmptyState = document.getElementById('logsEmptyState');
-        const typingIndicator = document.getElementById('typingIndicator');
+        // Safe DOM Access Helper
+        function safeGetElement(id) {
+            const el = document.getElementById(id);
+            if (!el) {
+                console.error(`[NFM-UI] Critical DOM element missing: #${id}`);
+            }
+            return el;
+        }
 
-        let ws = null;
-        let sessionId = 'chat_session'; // Fixed session ID for Chat-First
-        let isRunning = false;
-        let logCount = 0;
-        let stepCount = 0;
+        // Wrap execution to ensure DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM Elements
+            const chatArea = safeGetElement('chatArea');
+            const taskInput = safeGetElement('taskInput');
+            const sendBtn = safeGetElement('sendBtn');
+            const stopBtn = safeGetElement('stopBtn');
+            const statusDot = safeGetElement('statusDot');
+            const statusText = safeGetElement('statusText');
+            const planText = safeGetElement('planText');
+            const progressText = safeGetElement('progressText');
+            const progressFill = safeGetElement('progressFill');
+            const confidenceBadge = safeGetElement('confidenceBadge');
+            const todoList = safeGetElement('todoList');
+            const knowledgeTags = safeGetElement('knowledgeTags');
+            const codeOutput = safeGetElement('codeOutput');
+            const codeBlock = safeGetElement('codeBlock');
+            const codeEmptyState = safeGetElement('codeEmptyState');
+            const logsOutput = safeGetElement('logsOutput');
+            const logsEmptyState = safeGetElement('logsEmptyState');
+            const typingIndicator = safeGetElement('typingIndicator');
 
-        // Panel Tabs
-        document.querySelectorAll('.panel-tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.panel-section').forEach(p => p.classList.remove('active'));
-                tab.classList.add('active');
-                document.getElementById('panel' + tab.dataset.panel.charAt(0).toUpperCase() + tab.dataset.panel.slice(1)).classList.add('active');
+            // Check for critical failures
+            if (!chatArea || !taskInput || !sendBtn) {
+                console.error('[NFM-UI] Initialization aborted due to missing critical elements.');
+                return;
+            }
+
+            let ws = null;
+            let sessionId = 'chat_session'; // Fixed session ID for Chat-First
+            let isRunning = false;
+            let logCount = 0;
+            let stepCount = 0;
+
+            // Panel Tabs
+            document.querySelectorAll('.panel-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.panel-section').forEach(p => p.classList.remove('active'));
+                    tab.classList.add('active');
+                    const panelId = 'panel' + tab.dataset.panel.charAt(0).toUpperCase() + tab.dataset.panel.slice(1);
+                    const panel = safeGetElement(panelId);
+                    if (panel) panel.classList.add('active');
+                });
             });
-        });
 
         // State Management
         function setRunning(running) {
@@ -947,6 +992,38 @@
         });
 
         connectWebSocket();
+
+        // Load Mercury Status
+        async function loadMercuryStatus() {
+            try {
+                const res = await fetch('/api/mercury/status');
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    const s = data.data;
+                    document.getElementById('mercuryHot').textContent = s.hot_size > 0 ? (s.hot_size / 1024).toFixed(1) + ' KB' : 'Empty';
+                    document.getElementById('mercuryWarm').textContent = s.warm_days + ' days';
+                    document.getElementById('mercuryCold').textContent = s.cold_entries + ' entries';
+                    document.getElementById('mercurySkills').textContent = s.skills_count;
+                    
+                    const skillTags = document.getElementById('mercurySkillTags');
+                    if (s.skills.length > 0) {
+                        skillTags.innerHTML = s.skills.map(name => `<span class="tag">${name}</span>`).join('');
+                    } else {
+                        skillTags.innerHTML = '<span style="font-size: 11px; color: var(--text-muted);">No skills found</span>';
+                    }
+                } else {
+                    document.getElementById('mercuryHot').textContent = 'N/A';
+                    document.getElementById('mercuryWarm').textContent = 'N/A';
+                    document.getElementById('mercuryCold').textContent = 'N/A';
+                    document.getElementById('mercurySkills').textContent = 'N/A';
+                }
+            } catch (e) {
+                console.error('Failed to load Mercury status:', e);
+            }
+        }
+
+        loadMercuryStatus();
+        }); // End DOMContentLoaded
     </script>
 </body>
 </html>

@@ -25,9 +25,10 @@ class NFMSystemAgent:
     
     职责:
     1. 管理系统生命周期 (初始化、运行、清理)
-    2. 协调所有子模块 (Frame, Mnemo, Spark, Vibe)
+    2. 协调所有子模块 (Frame, Mnemo, Spark, Vibe, Mercury)
     3. 提供统一的对外接口
     4. 管理上下文和状态
+    5. 集成 Mercury-Crab-Agent 记忆与进化引擎
     """
     
     def __init__(self, project_path: str = None, config: Dict = None):
@@ -41,6 +42,9 @@ class NFMSystemAgent:
         self.spark: Optional[SparkExecutor] = None
         self.git: Optional[GitOps] = None
         self.vibe: Optional[VibeInterface] = None
+        
+        # Mercury 记忆层
+        self.mercury_bridge = None
         
         # 状态追踪
         self.is_initialized = False
@@ -93,6 +97,9 @@ class NFMSystemAgent:
             use_input = self.config.get("interactive", True)
             self.vibe = VibeInterface(use_input=use_input)
             
+            # 7. 初始化 Mercury 记忆与进化引擎
+            self._initialize_mercury()
+            
             self.is_initialized = True
             print("✅ NFM System Agent 初始化完成!")
             return True
@@ -115,6 +122,38 @@ class NFMSystemAgent:
         
         for rule in default_rules:
             self.frame.add_rule(rule)
+
+    def _initialize_mercury(self):
+        """初始化 Mercury-Crab-Agent 记忆与进化引擎"""
+        try:
+            from nexus.mercury_bridge import MercuryBridge
+            
+            # 查找 Mercury-Crab-Agent 项目路径
+            possible_paths = [
+                self.project_path.parent / "Mercury-Crab-Agent",
+                Path(os.path.expanduser("~")) / "Documents" / "GitHub" / "Mercury-Crab-Agent",
+                Path(os.path.expanduser("~")) / "GitHub" / "Mercury-Crab-Agent",
+            ]
+            
+            mercury_path = None
+            for path in possible_paths:
+                if path.exists() and (path / "MEMORY.md").exists():
+                    mercury_path = str(path)
+                    break
+            
+            if mercury_path:
+                self.mercury_bridge = MercuryBridge(mercury_path)
+                print(f"   🦀 Mercury Bridge 已连接: {mercury_path}")
+                status = self.mercury_bridge.get_status()
+                print(f"      HOT: {status['hot_memory_size']} bytes | "
+                      f"WARM: {status['warm_days']} days | "
+                      f"Skills: {status['skills_count']}")
+            else:
+                print("   ⚠️ Mercury-Crab-Agent 未找到，记忆层已禁用")
+                
+        except Exception as e:
+            print(f"   ⚠️ Mercury 初始化跳过: {e}")
+            self.mercury_bridge = None
 
     def execute_command(self, command: str, context_tags: List[str] = None) -> Dict:
         """
@@ -144,6 +183,13 @@ class NFMSystemAgent:
         plan = self.memory.read("plan.md")
         progress = self.memory.read("progress.md")
         
+        # 3.5 注入 Mercury 记忆层上下文 (如果可用)
+        mercury_context = ""
+        if self.mercury_bridge:
+            mercury_context = self.mercury_bridge.enrich_context("", command)
+            if mercury_context:
+                plan = (plan or "") + "\n\n## Mercury 记忆注入\n" + mercury_context[:1500]
+        
         # 4. 展示 Dashboard
         self.vibe.render_dashboard(plan, progress)
         
@@ -159,6 +205,10 @@ class NFMSystemAgent:
         if result["status"] == "ok":
             # 成功路径
             print(f"✅ [Spark] 成功")
+            
+            # 记录到 Mercury 日志
+            if self.mercury_bridge:
+                self.mercury_bridge.memory.log_daily(f"命令执行成功: {command}")
             
             # Git 提交
             self.git.add_all()
@@ -184,6 +234,13 @@ class NFMSystemAgent:
         else:
             # 错误路径
             print(f"❌ [Spark] 失败: {result['error']}")
+            
+            # 记录错误到 Mercury 记忆层
+            if self.mercury_bridge:
+                self.mercury_bridge.record_correction(
+                    error=result.get("error", "")[:100],
+                    fix="pending"
+                )
             
             # 查询全局经验库
             print("🧠 [Nexus] 搜索历史解决方案...")
@@ -236,13 +293,21 @@ class NFMSystemAgent:
 
     def get_system_status(self) -> Dict:
         """获取系统当前状态"""
-        return {
+        status = {
             "is_initialized": self.is_initialized,
             "project_path": str(self.project_path),
             "current_context": self.current_context_tags,
             "execution_count": len(self.execution_history),
-            "memory_bank_files": list((self.project_path / "memory-bank").glob("*.md")) if self.is_initialized else []
+            "memory_bank_files": list((self.project_path / "memory-bank").glob("*.md")) if self.is_initialized else [],
         }
+        
+        # 添加 Mercury 状态
+        if self.mercury_bridge:
+            status["mercury"] = self.mercury_bridge.get_status()
+        else:
+            status["mercury"] = None
+        
+        return status
 
     def reset_context(self):
         """重置上下文 (Commit & Clear)"""

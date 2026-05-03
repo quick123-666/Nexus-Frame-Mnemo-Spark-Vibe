@@ -12,6 +12,7 @@
 | **Vibe** | 交互界面 | 聊天前端 (FastAPI+WebSocket)、实时反馈 | ✅ 已集成 |
 | **Visual** | 视觉感知 | **Mano-P** 集成、GUI 自动化、屏幕识别 | ✅ 已集成 |
 | **Knowledge** | 知识库 | 本地 Wiki 索引、项目推荐、代码模式匹配 | ✅ 已集成 |
+| **Chat** | 聊天室 | 实时多人聊天、AI 机器人集成 (Nexus Chat) | ✅ 新增 |
 
 ## 🛠️ 2. 依赖环境清单
 运行本项目需要以下 Python 库支持（`installer.py` 会自动安装）：

@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+pydantic
+websockets
+httpx
+aiofiles
+jinja2
+python-multipart
+psutil
+colorama
+pyyaml
+requests
+mss
+pynput
+pillow
+llmwikify
+fastmcp

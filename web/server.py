@@ -14,7 +14,14 @@ from typing import Dict, List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import os
+
+# Mount static files directory
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -31,6 +38,7 @@ from llm.local_brain import LocalBrain, AIContext, AIDecision
 from knowledge import KnowledgeBase
 from knowledge.code_patterns import generate_code_guidance
 from visual.runner import execute_mano_task
+from nexus.chat_room import chat_manager, handle_chat_websocket
 
 app = FastAPI(title="NFM-SV Vibe Web Interface", version="0.7.0-mano")
 
@@ -336,6 +344,71 @@ async def stream_agent_msg(websocket: WebSocket, text: str, style: str = "system
         "text": text,
         "style": style
     })
+
+# --- Chat Room Module ---
+@app.get("/chat", response_class=HTMLResponse)
+async def get_chat():
+    html_path = os.path.join(os.path.dirname(__file__), "templates", "chat.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "<h1>NFM-SV Chat</h1><p>Chat UI not found.</p>"
+
+@app.websocket("/ws/chat/{user_id}")
+async def chat_websocket(websocket: WebSocket, user_id: str):
+    await handle_chat_websocket(websocket, user_id)
+# --- End Chat Room Module ---
+
+# --- Mercury Status API ---
+@app.get("/api/mercury/status")
+async def get_mercury_status():
+    """获取 Mercury 记忆层状态 (Defensive: Handles missing paths gracefully)"""
+    if mercury_agent:
+        try:
+            status = {
+                "hot_size": 0,
+                "warm_days": 0,
+                "cold_entries": 0,
+                "skills_count": 0,
+                "skills": [],
+                "corrections": [],
+            }
+            
+            hot_path = os.path.join(mercury_agent.project_path, "MEMORY.md")
+            if os.path.exists(hot_path):
+                status["hot_size"] = os.path.getsize(hot_path)
+            
+            memory_dir = os.path.join(mercury_agent.project_path, "memory")
+            if os.path.exists(memory_dir):
+                import re as re_mod
+                files = [f for f in os.listdir(memory_dir) if re_mod.match(r"\d{4}-\d{2}-\d{2}\.md", f)]
+                status["warm_days"] = len(files)
+                total_entries = 0
+                for fname in files[:5]:
+                    fpath = os.path.join(memory_dir, fname)
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        total_entries += sum(1 for line in f if line.strip().startswith("- "))
+                status["cold_entries"] = total_entries
+            
+            skills_dir = os.path.join(mercury_agent.project_path, "skills")
+            if os.path.exists(skills_dir):
+                skills = [f.replace(".skill", "") for f in os.listdir(skills_dir) if f.endswith(".skill")]
+                status["skills_count"] = len(skills)
+                status["skills"] = skills[:10]
+            
+            self_improving_dir = os.path.join(os.path.dirname(mercury_agent.project_path), "self-improving")
+            corrections_path = os.path.join(self_improving_dir, "corrections.md")
+            if os.path.exists(corrections_path):
+                with open(corrections_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                status["corrections"] = [line.strip() for line in lines[-5:] if line.strip().startswith("- ")]
+            
+            return {"status": "ok", "data": status}
+        except Exception as e:
+            print(f"[API ERROR] Mercury status failed: {e}")
+            return {"status": "error", "message": str(e)}
+    return {"status": "unavailable", "message": "Mercury Agent not initialized"}
+# --- End Mercury Status API ---
 
 # Mercury Agent Heartbeat Loop
 async def mercury_heartbeat_loop():

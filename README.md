@@ -102,6 +102,19 @@ The system follows four core principles:
 
 ---
 
+## 🔗 External Dependencies · 外部依赖
+
+NFM-SV 是一个操作系统级项目，它**不包含**以下项目，但会通过本地路径或 API **调用**它们以获得完整功能。请务必在本地克隆这些项目并放置在同一父目录下。
+
+| Project · 项目 | GitHub Link · 链接 | Purpose · 作用 |
+|:--------------|:------------------|:----------------------|
+| **Mercury-Crab-Agent** | [🦀 GitHub](https://github.com/quick123-666/Mercury-Crab-Agent) | **核心记忆**：提供 HOT/WARM/COLD 记忆层、技能库和自我进化。 |
+| **Nexus-Medic-Team** | [🚑 GitHub](https://github.com/quick123-666/Nexus-Medic-Team) | **自愈团队**：负责代码诊断、错误分析与自动修复。 |
+| **Project-Manager-Hub** | [🏢 GitHub](https://github.com/quick123-666/Project-Manager-Hub) | **管理中**：提供 Zero-Team 等专家智能体定义，用于复杂任务分配。 |
+| **Mano-P** | [🎨 GitHub](https://github.com/quick123-666/Mano-P) | **GUI 自动化**：提供桌面界面操作和视觉控制能力。 |
+
+> **注意**：如果这些项目未找到，NFM-SV 仍可作为独立工具运行，但相关的高级功能（记忆注入、自愈、自动化界面）将被静默禁用。
+
 ## 🚀 Quick Start · 快速开始
 
 ### Prerequisites · 前置条件

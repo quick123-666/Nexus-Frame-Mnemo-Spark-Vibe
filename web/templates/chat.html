@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFM-SV Chat Room</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-900 text-white h-screen flex items-center justify-center">
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="bg-slate-800 p-8 rounded-xl shadow-2xl w-96 border border-slate-700">
+        <h1 class="text-2xl font-bold mb-6 text-center text-blue-400">Welcome to Nexus Chat</h1>
+        <input id="username" type="text" placeholder="Enter your nickname..." 
+               class="w-full p-3 rounded bg-slate-700 border border-slate-600 focus:outline-none focus:border-blue-500 mb-4 text-white">
+        <button onclick="joinChat()" 
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded transition duration-200">
+            Join Room
+        </button>
+    </div>
+
+    <!-- Chat Screen -->
+    <div id="chat-screen" class="hidden flex-col w-full max-w-4xl h-[80vh] bg-slate-800 rounded-xl shadow-2xl border border-slate-700 overflow-hidden">
+        <!-- Header -->
+        <div class="bg-slate-900 p-4 border-b border-slate-700 flex justify-between items-center">
+            <h2 class="font-bold text-lg">Nexus Chat Room</h2>
+            <span id="user-display" class="text-sm bg-slate-700 px-3 py-1 rounded-full text-blue-300"></span>
+        </div>
+
+        <!-- Messages -->
+        <div id="messages" class="flex-1 p-4 overflow-y-auto scrollbar-hide space-y-3">
+            <!-- Messages will appear here -->
+        </div>
+
+        <!-- Input -->
+        <div class="p-4 bg-slate-900 border-t border-slate-700 flex gap-2">
+            <input id="msg-input" type="text" placeholder="Type a message... (Use /ai for bot)" 
+                   class="flex-1 p-3 rounded bg-slate-700 border border-slate-600 focus:outline-none focus:border-blue-500 text-white"
+                   onkeydown="if(event.key === 'Enter') sendMessage()">
+            <button onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 rounded font-bold transition duration-200">
+                Send
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let username = '';
+
+        function joinChat() {
+            const input = document.getElementById('username');
+            if (!input.value.trim()) return alert("Please enter a name");
+            username = input.value.trim();
+
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('chat-screen').classList.remove('hidden');
+            document.getElementById('chat-screen').classList.add('flex');
+            document.getElementById('user-display').textContent = username;
+
+            // Connect WebSocket
+            ws = new WebSocket(`ws://${window.location.host}/ws/chat/${username}`);
+
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                renderMessage(data);
+            };
+
+            ws.onclose = function() {
+                addSystemMessage("Disconnected from server.");
+            };
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const msg = input.value.trim();
+            if (!msg || !ws) return;
+
+            ws.send(JSON.stringify({ user: username, message: msg }));
+            input.value = '';
+        }
+
+        function renderMessage(data) {
+            const container = document.getElementById('messages');
+            const div = document.createElement('div');
+
+            if (data.type === 'system') {
+                div.className = "text-center text-xs text-slate-500 my-2";
+                div.innerText = data.message;
+            } else if (data.type === 'bot') {
+                div.className = "flex flex-col items-start";
+                div.innerHTML = `
+                    <span class="text-xs text-purple-400 mb-1">${data.user} • ${new Date(data.timestamp * 1000).toLocaleTimeString()}</span>
+                    <div class="bg-purple-900/50 border border-purple-700 px-4 py-2 rounded-lg max-w-[80%]">
+                        ${data.message}
+                    </div>
+                `;
+            } else {
+                const isMe = data.user === username;
+                div.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'}`;
+                div.innerHTML = `
+                    <span class="text-xs text-slate-400 mb-1">${data.user} • ${new Date(data.timestamp * 1000).toLocaleTimeString()}</span>
+                    <div class="${isMe ? 'bg-blue-600' : 'bg-slate-700'} px-4 py-2 rounded-lg max-w-[80%]">
+                        ${data.message}
+                    </div>
+                `;
+            }
+
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+    </script>
+</body>
+</html>
