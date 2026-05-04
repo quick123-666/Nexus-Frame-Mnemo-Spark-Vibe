@@ -1,8 +1,10 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 NFM-SV System Agent: The Ultimate Controller
 独立 Agent 模块，统一管理 Nexus-Frame-Mnemo-Spark-Vibe 系统
+
+Upgraded: Now uses hybrid search (BM25 + Vector + RRF)
 """
 import os
 import sys
@@ -29,6 +31,7 @@ class NFMSystemAgent:
     3. 提供统一的对外接口
     4. 管理上下文和状态
     5. 集成 Mercury-Crab-Agent 记忆与进化引擎
+    6. 【新增】混合搜索记忆系统 (BM25 + 向量 + RRF)
     """
     
     def __init__(self, project_path: str = None, config: Dict = None):
@@ -63,8 +66,8 @@ class NFMSystemAgent:
         Args:
             template_type: 模板类型 (web, python, etc.) 或 None (使用当前目录)
         """
-        print(f"🚀 NFM System Agent 初始化...")
-        print(f"   📁 项目路径: {self.project_path}")
+        print(f"[Init] NFM System Agent 初始化...")
+        print(f"   [Dir] 项目路径: {self.project_path}")
         
         try:
             # 1. 初始化 Frame (规则引擎)
@@ -75,13 +78,15 @@ class NFMSystemAgent:
             # 加载默认规则
             self._load_default_rules()
             
-            # 2. 初始化 Mnemo (记忆库)
+            # 2. 初始化 Mnemo (记忆库) - 升级版支持混合搜索
             memory_path = self.project_path / "memory-bank"
             self.memory = MemoryBank(str(memory_path))
+            print(f"   [Memory] MemoryBank 已升级: FTS5 BM25 + 向量搜索")
             
-            # 3. 初始化 Global Mnemo (全局经验库)
+            # 3. 初始化 Global Mnemo (全局经验库) - 升级版支持混合搜索
             global_db = self.project_path / "global_mnemo.db"
             self.global_memory = GlobalMnemo(str(global_db))
+            print(f"   [Global] GlobalMnemo 已升级: 混合搜索 (BM25 + 向量)")
             
             # 4. 初始化 Spark (执行引擎)
             self.spark = SparkExecutor(cwd=str(self.project_path))
@@ -101,13 +106,29 @@ class NFMSystemAgent:
             self._initialize_mercury()
             
             self.is_initialized = True
-            print("✅ NFM System Agent 初始化完成!")
+            print("[PASS] NFM System Agent 初始化完成!")
+            self._print_memory_capabilities()
             return True
             
         except Exception as e:
-            print(f"❌ 初始化失败: {e}")
+            print(f"[FAIL] 初始化失败: {e}")
             self.is_initialized = False
             return False
+
+    def _print_memory_capabilities(self):
+        """打印记忆系统能力"""
+        print("\n[Memory] 记忆系统能力:")
+        print("   [OK] FTS5 BM25 关键词搜索")
+        print("   [OK] 向量语义搜索 (fastembed)")
+        print("   [OK] RRF 混合搜索融合")
+        print("   [OK] 重要性评分 (自动计算)")
+        print("   [OK] 记忆分层 (core/learned/episodic/working/procedural)")
+        print("   [OK] 自动过期 (TTL)")
+        print("   [OK] 记忆整合 (去重)")
+        if self.memory and self.memory.embedder:
+            print(f"   [OK] 嵌入模型: {self.memory.embedding_model}")
+        else:
+            print("   ⚠️  嵌入模型未加载 (仅 BM25 可用)")
 
     def _load_default_rules(self):
         """加载默认规则集"""
@@ -118,6 +139,9 @@ class NFMSystemAgent:
             RuleNode(id="base_test", category="quality", 
                     content="Run tests before committing.", 
                     weight=90, triggers=["python", "web"]),
+            RuleNode(id="memory_save", category="memory",
+                    content="Save important findings to memory bank after each task.",
+                    weight=85, triggers=["python", "web", "git"]),
         ]
         
         for rule in default_rules:
@@ -143,7 +167,7 @@ class NFMSystemAgent:
             
             if mercury_path:
                 self.mercury_bridge = MercuryBridge(mercury_path)
-                print(f"   🦀 Mercury Bridge 已连接: {mercury_path}")
+                print(f"   [Mercury] Mercury Bridge 已连接: {mercury_path}")
                 status = self.mercury_bridge.get_status()
                 print(f"      HOT: {status['hot_memory_size']} bytes | "
                       f"WARM: {status['warm_days']} days | "
@@ -179,7 +203,7 @@ class NFMSystemAgent:
         active_rules = self.frame.resolve_rules(self.current_context_tags)
         rule_context = "\n".join([f"- [{r.category}] {r.content}" for r in active_rules])
         
-        # 3. 加载 Memory Bank 状态
+        # 3. 加载 Memory Bank 状态 (向后兼容)
         plan = self.memory.read("plan.md")
         progress = self.memory.read("progress.md")
         
@@ -199,23 +223,26 @@ class NFMSystemAgent:
             return {"status": "aborted", "reason": "用户拒绝"}
         
         # 6. 执行命令
-        print(f"⚡ [Spark] 执行: {command}")
+        print(f"[Spark] [Spark] 执行: {command}")
         result = self.spark.run(command)
         
         if result["status"] == "ok":
             # 成功路径
-            print(f"✅ [Spark] 成功")
+            print(f"[PASS] [Spark] 成功")
             
             # 记录到 Mercury 日志
             if self.mercury_bridge:
                 self.mercury_bridge.memory.log_daily(f"命令执行成功: {command}")
+            
+            # 【新增】保存到 Mnemo 记忆库
+            self._save_to_memory(command, result, "success")
             
             # Git 提交
             self.git.add_all()
             self.git.commit(f"feat: {command}")
             
             # 更新进度
-            new_progress = progress + f"\n- ✅ 完成: {command}"
+            new_progress = progress + f"\n- [PASS] 完成: {command}"
             self.memory.write("progress.md", new_progress)
             
             # 触发完成钩子
@@ -233,7 +260,7 @@ class NFMSystemAgent:
         
         else:
             # 错误路径
-            print(f"❌ [Spark] 失败: {result['error']}")
+            print(f"[FAIL] [Spark] 失败: {result['error']}")
             
             # 记录错误到 Mercury 记忆层
             if self.mercury_bridge:
@@ -242,15 +269,20 @@ class NFMSystemAgent:
                     fix="pending"
                 )
             
-            # 查询全局经验库
-            print("🧠 [Nexus] 搜索历史解决方案...")
+            # 【新增】保存失败经验到 Mnemo
+            self._save_to_memory(command, result, "failure")
+            
+            # 查询全局经验库 (使用混合搜索)
+            print("[Memory] [GlobalMnemo] 搜索历史解决方案 (混合搜索)...")
             solutions = self.global_memory.search_solutions(result["error"], self.current_context_tags)
             
             fix_cmd = None
             if solutions:
                 best = solutions[0]
-                print(f"💡 找到 {best['frequency']} 个历史匹配!")
-                print(f"   建议方案: {best['solution']}")
+                print(f"[Idea] 找到 {len(solutions)} 个历史匹配!")
+                print(f"   方案: {best['solution']}")
+                print(f"   匹配分数: {best.get('score', 0):.4f}")
+                print(f"   历史频率: {best.get('frequency', 0)}")
                 
                 apply = self.vibe.request_approval("应用历史方案？(y/n)")
                 if apply.lower() == 'y':
@@ -263,18 +295,23 @@ class NFMSystemAgent:
                 return {"status": "aborted", "reason": "修复中止"}
             
             # 重试
-            print(f"🔧 [Spark] 重试: {fix_cmd}")
+            print(f"[Fix] [Spark] 重试: {fix_cmd}")
             retry = self.spark.run(fix_cmd)
             
             if retry["status"] == "ok":
-                print(f"✅ [Spark] 修复成功")
+                print(f"[PASS] [Spark] 修复成功")
                 
                 self.git.add_all()
                 self.git.commit(f"fix: {fix_cmd}")
                 
-                # 保存到全局经验库
+                # 保存到全局经验库 (混合搜索已启用)
                 self.global_memory.add_experience(result["error"], fix_cmd, self.current_context_tags)
-                print("🧠 [Global] 经验已保存")
+                self.global_memory.record_success(result["error"])
+                print("[Memory] [Global] 经验已保存 (FTS5 + 向量索引)")
+                
+                # 更新进度
+                new_progress = self.memory.read("progress.md") + f"\n- [PASS] 修复: {command} -> {fix_cmd}"
+                self.memory.write("progress.md", new_progress)
                 
                 self.execution_history.append({
                     "command": command,
@@ -285,11 +322,109 @@ class NFMSystemAgent:
                 
                 return {"status": "ok", "output": retry["output"]}
             else:
+                # 记录失败
+                self.global_memory.record_failure(result["error"])
+                
                 # 触发错误钩子
                 if self.on_error:
                     self.on_error(command, result)
                 
                 return {"status": "error", "error": retry["error"]}
+
+    def _save_to_memory(self, command: str, result: Dict, outcome: str):
+        """保存执行结果到记忆库"""
+        try:
+            # 构造记忆内容
+            content_lines = [
+                f"Command: {command}",
+                f"Outcome: {outcome}",
+                f"Context: {', '.join(self.current_context_tags)}",
+            ]
+            
+            if outcome == "success":
+                content_lines.append(f"Output: {result.get('output', '')[:500]}")
+            else:
+                content_lines.append(f"Error: {result.get('error', '')[:500]}")
+            
+            content = "\n".join(content_lines)
+            
+            # 选择 tier
+            tier = "episodic" if outcome == "success" else "learned"
+            
+            # 添加到记忆库 (自动生成嵌入向量)
+            memory_id = self.memory.add(
+                content=content,
+                tier=tier,
+                metadata={
+                    "command": command,
+                    "outcome": outcome,
+                    "tags": self.current_context_tags
+                },
+                importance=0.7 if outcome == "success" else 0.9  # 失败经验更重要
+            )
+            
+            print(f"   💾 已保存到记忆库: {memory_id[:8]}...")
+            
+        except Exception as e:
+            print(f"   ⚠️ 保存记忆失败: {e}")
+
+    # ========== 新增: 记忆管理 API ==========
+    
+    def search_memory(self, query: str, limit: int = 5, 
+                     tier_filter: List[str] = None) -> List[Dict]:
+        """
+        搜索记忆库 (混合搜索)
+        
+        Args:
+            query: 搜索查询
+            limit: 返回结果数量
+            tier_filter: 限定搜索的记忆层级
+        
+        Returns:
+            记忆列表，按 RRF 分数排序
+        """
+        if not self.memory:
+            return []
+        
+        return self.memory.search_hybrid(query, limit=limit, tier_filter=tier_filter)
+    
+    def add_memory(self, content: str, tier: str = "learned", 
+                   metadata: Dict = None, importance: float = None) -> str:
+        """
+        手动添加记忆
+        
+        Args:
+            content: 记忆内容
+            tier: 记忆层级 (core/learned/episodic/working/procedural)
+            metadata: 元数据
+            importance: 重要性 (0.0-1.0)，自动计算如果为 None
+        
+        Returns:
+            记忆 ID
+        """
+        if not self.memory:
+            raise RuntimeError("MemoryBank 未初始化")
+        
+        return self.memory.add(content, tier=tier, metadata=metadata, importance=importance)
+    
+    def get_memories_by_tier(self, tier: str, limit: int = 50) -> List[Dict]:
+        """按层级获取记忆"""
+        if not self.memory:
+            return []
+        
+        return self.memory.get_by_tier(tier, limit=limit)
+    
+    def consolidate_memories(self, threshold: float = 0.9) -> int:
+        """
+        整合重复记忆 (去重)
+        
+        Returns:
+            合并的记忆数量
+        """
+        if not self.memory:
+            return 0
+        
+        return self.memory.consolidate(similarity_threshold=threshold)
 
     def get_system_status(self) -> Dict:
         """获取系统当前状态"""
@@ -307,11 +442,20 @@ class NFMSystemAgent:
         else:
             status["mercury"] = None
         
+        # 添加记忆系统状态
+        if self.memory:
+            status["memory_db"] = str(self.memory.db_path)
+            status["embedding_model"] = self.memory.embedding_model if self.memory.embedder else None
+        
+        if self.global_memory:
+            status["global_db"] = str(self.global_memory.db_path)
+            status["global_stats"] = self.global_memory.get_stats()
+        
         return status
 
     def reset_context(self):
         """重置上下文 (Commit & Clear)"""
-        print("🔄 重置上下文...")
+        print("[Reset] 重置上下文...")
         self.current_context_tags = []
         # 可以在这里添加清除 LLM 对话历史的逻辑
 
