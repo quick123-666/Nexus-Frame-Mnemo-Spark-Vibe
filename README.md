@@ -115,6 +115,80 @@ NFM-SV 是一个操作系统级项目，它**不包含**以下项目，但会通
 
 > **注意**：如果这些项目未找到，NFM-SV 仍可作为独立工具运行，但相关的高级功能（记忆注入、自愈、自动化界面）将被静默禁用。
 
+---
+
+## 🧠 Upgrade: Hybrid Memory (2026-05) · 升级：混合记忆系统
+
+NFM-SV 的记忆系统已升级，对标 2026 年主流方案（agentmem/agent-memory-store）。
+
+### 新增能力
+
+| 功能 | 原版 | 升级版 |
+|:---|:---|:---|
+| **搜索方式** | `LIKE` 模糊匹配 | BM25 (FTS5) + 向量 + RRF 融合 |
+| **记忆分层** | 无 | core/learned/episodic/working/procedural |
+| **重要性评分** | 无 | 自动计算 (0.0-1.0) |
+| **记忆整合** | 无 | 自动去重（余弦相似度 ≥0.9） |
+| **TTL 过期** | 无 | working 层自动过期（默认 7 天） |
+| **离线模式** | 无 | 无网络时自动降级到纯 BM25 |
+
+### 技术栈
+
+```
+SQLite + FTS5 (BM25)
+    ↓
+fastembed (本地向量嵌入，BAAI/bge-small-en-v1.5)
+    ↓
+RRF 融合 (BM25: 0.4 + Vector: 0.6)
+```
+
+### 新增 API
+
+**MemoryBank** (`mnemo/bank.py`):
+```python
+# 添加记忆（自动计算重要性 + 生成向量）
+mid = agent.add_memory("用户偏好: pytest", tier="learned")
+
+# 混合搜索（BM25 + 向量）
+results = agent.search_memory("pytest 测试", limit=5)
+
+# 按层级获取
+learned = agent.get_memories_by_tier("learned", limit=10)
+
+# 去重整合
+merged = agent.consolidate_memories(threshold=0.9)
+```
+
+**GlobalMnemo** (`mnemo/global_exp.py`):
+```python
+# 搜索解决方案（混合搜索）
+solutions = agent.global_memory.search_solutions("ModuleNotFoundError", context_tags=["python"])
+
+# 记录成功/失败
+agent.global_memory.record_success("ModuleNotFoundError: requests")
+agent.global_memory.record_failure("Some error")
+
+# 获取统计
+stats = agent.global_memory.get_stats()
+```
+
+### 向后兼容
+
+- ✅ `read()/write()` 文件操作保持不变
+- ✅ `add_experience()` 原 API 正常工作
+- ✅ 旧代码无需修改即可运行
+- ✅ 无向量模型时自动降级到纯 BM25
+
+### 安装新依赖
+
+```bash
+pip install fastembed numpy
+```
+
+> **注意**：首次使用会下载 `BAAI/bge-small-en-v1.5` 模型（~45MB），无网络时自动跳过。
+
+---
+
 ## 🚀 Quick Start · 快速开始
 
 ### Prerequisites · 前置条件
